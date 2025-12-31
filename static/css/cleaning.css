@@ -1,0 +1,94 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #f4f6f8;
+}
+
+#svgObj {
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  border: none;
+}
+
+/* Tooltip */
+#tooltip {
+  position: fixed;
+  display: none;
+  background: #111;
+  color: #0f0;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 9999;
+  box-shadow: 0 0 10px #0f0;
+}
+
+/* Safety */
+g, rect, path {
+  pointer-events: visiblePainted;
+}
+
+/* Clickables */
+.clickable {
+  cursor: pointer;
+}
+
+/* ===== PIPE DEFAULT ===== */
+path[id^="pipe_"], #e2d {
+  stroke: black;
+  stroke-width: 6;
+  fill: none;
+}
+
+/* Grain flow */
+.pipe-flow {
+  stroke: #00ff00;
+  stroke-dasharray: 14 14;
+  animation: flowMove 1s linear infinite;
+}
+
+/* Dust flow */
+.pipe-dust {
+  stroke: orange;
+  stroke-dasharray: 10 10;
+  animation: flowMove 0.7s linear infinite;
+}
+
+@keyframes flowMove {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -28; }
+}
+/* ================= PIPE BASE ================= */
+
+/* Animate BOTH path pipes AND rect pipes */
+path[id^="pipe_"],
+g[id^="pipe_"] rect,
+#e2d {
+  stroke: black;
+  stroke-width: 6;
+  fill: none;
+}
+
+/* Grain flow */
+.pipe-flow {
+  stroke: #00ff00;
+  stroke-dasharray: 14 14;
+  animation: flowMove 1s linear infinite;
+}
+
+/* Dust flow */
+.pipe-dust {
+  stroke: orange;
+  stroke-dasharray: 10 10;
+  animation: flowMove 0.8s linear infinite;
+}
+
+@keyframes flowMove {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -28; }
+}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rice Mill Cleaning SCADA</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #f4f6f8;
+    }
+
+    /* SVG container */
+    #svgObj {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      border: none;
+    }
+
+    /* Tooltip */
+    #tooltip {
+      position: fixed;
+      display: none;
+      background: #111;
+      color: #0f0;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: monospace;
+      pointer-events: none;
+      z-index: 9999;
+      box-shadow: 0 0 10px #0f0;
+    }
+  </style>
+</head>
+
+<body>
+
+  <object
+    id="svgObj"
+    type="image/svg+xml"
+    data="{{ url_for('static', filename='svg/cleaning.svg') }}">
+  </object>
+
+  <div id="tooltip"></div>
+
+  <script src="{{ url_for('static', filename='js/cleaning.js') }}"></script>
+
+</body>
+</html>
