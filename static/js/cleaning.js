@@ -153,11 +153,11 @@ pipeFlow("pipe_13", PLC.E1_RUN, "down");
 /* E2 → bin_3 */
 pipeFlow("pipe_5", PLC.E2_RUN, "down");
 
-/* bin_3 → classifier */
-pipeFlow("pipe_4", PLC.CLASSIFIER_RUN, "right");
+/* bin_3 → classifier (DUST FLOW → ORANGE) */
+pipeFlow("pipe_4", PLC.DUST1_FLOW, "right", true);
 
-/* classifier → dust_1 */
-pipeFlow("pipe_14", PLC.DUST1_FLOW, "right", true);
+/* classifier → outlet (NORMAL GRAIN FLOW → GREEN) */
+pipeFlow("pipe_14", PLC.CLASSIFIER_RUN, "right");
 
 /* E3 → bin_4 */
 pipeFlow("pipe_7", PLC.E3_RUN, "down");
@@ -171,8 +171,8 @@ pipeFlow("pipe_8", PLC.DUST2_FLOW, "right", true);
 /* E4 → bin_5 */
 pipeFlow("pipe_10", PLC.E4_RUN, "down");
 
-/* bin_5 → dust_3 */
-pipeFlow("pipe_9", PLC.DUST3_FLOW, "right", true);
+/* bin_5 → outlet (NORMAL FLOW like pipe_14) */
+pipeFlow("pipe_9", PLC.DESTONER_RUN, "right");
 
 /* Main header / trunk pipe */
 pipeFlow("e2d", PLC.E1_RUN || PLC.E2_RUN || PLC.E3_RUN || PLC.E4_RUN, "right");
