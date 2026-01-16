@@ -26,7 +26,7 @@ document.getElementById("svgObj").addEventListener("load", async () => {
 /* ===================== TAG DEFINITIONS ===================== */
 
 async function loadTagDefs() {
-  const r = await fetch("/tag-defs");
+  const r = await fetch("/static/js/tag_definitions.json");
   TAG_DEFS = await r.json();
 }
 
