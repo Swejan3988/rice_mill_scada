@@ -1,66 +1,44 @@
-/* ===================== GLOBALS ===================== */
+/* =========================================================
+   GLOBALS
+========================================================= */
 
 let PLC = {};
-let TAG_DEFS = {};
-let svg, tooltip;
+let svg;
 
-/* ===================== SVG LOAD ===================== */
+/* =========================================================
+   MACHINE CONFIG (SVG ID → PLC TAG)
+   (Excel & SVG remain unchanged)
+========================================================= */
 
-document.getElementById("svgObj").addEventListener("load", async () => {
+const MACHINE_MAP = {
+  // Elevators
+  e_1: { name: "Elevator E1", runTag: "E1_RUN" },
+  e_2: { name: "Elevator E2", runTag: "E2_RUN" },
+  e_3: { name: "Elevator E3", runTag: "E3_RUN" },
+  e_4: { name: "Elevator E4", runTag: "E4_RUN" },
+
+  // Cleaning section
+  cc_1: { name: "Classifier", runTag: "CC1_RUN" },
+  destoner: { name: "Destoner", runTag: "DESTONER_RUN" },
+  hulling_c: { name: "Hulling Machine", runTag: "HULLING_RUN" },
+
+  // Add more machines here safely later
+};
+
+/* =========================================================
+   SVG LOAD
+========================================================= */
+
+document.getElementById("svgObj").addEventListener("load", () => {
   svg = document.getElementById("svgObj").contentDocument;
 
-  // Responsive safety
-  const rootSvg = svg.documentElement;
-  rootSvg.setAttribute("width", "100%");
-  rootSvg.setAttribute("height", "100%");
-  rootSvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-
-  createTooltip();
-  await loadTagDefs();
-  bindClicks();
-  bindHoverGlow();
-
+  bindMachineClicks();
   setInterval(pollPLC, 1000);
 });
 
-/* ===================== TAG DEFINITIONS ===================== */
-
-async function loadTagDefs() {
-  const r = await fetch("/static/js/tag_definitions.json");
-  TAG_DEFS = await r.json();
-}
-
-/* ===================== TOOLTIP ===================== */
-
-function createTooltip() {
-  tooltip = document.createElement("div");
-  tooltip.id = "tooltip";
-  Object.assign(tooltip.style, {
-    position: "fixed",
-    background: "#111",
-    color: "#0f0",
-    padding: "6px 10px",
-    fontSize: "12px",
-    borderRadius: "6px",
-    pointerEvents: "none",
-    display: "none",
-    zIndex: 9999
-  });
-  document.body.appendChild(tooltip);
-}
-
-function showTip(e, html) {
-  tooltip.innerHTML = html;
-  tooltip.style.left = e.clientX + 15 + "px";
-  tooltip.style.top = e.clientY + 15 + "px";
-  tooltip.style.display = "block";
-}
-
-function hideTip() {
-  tooltip.style.display = "none";
-}
-
-/* ===================== PLC POLL ===================== */
+/* =========================================================
+   PLC POLLING
+========================================================= */
 
 async function pollPLC() {
   const r = await fetch("/tags");
@@ -68,249 +46,172 @@ async function pollPLC() {
   updateVisuals();
 }
 
-/* ===================== SAFE TOGGLE ===================== */
+/* =========================================================
+   MACHINE CLICK → POPUP
+========================================================= */
 
-function toggle(tag) {
-  if (TAG_DEFS[tag]?.direction !== "READ_WRITE") return;
-  fetch(`/toggle/${tag}`);
-}
-
-/* ===================== CLICK BINDING ===================== */
-
-function bindClicks() {
-  Object.entries(TAG_DEFS).forEach(([tag, def]) => {
-    if (def.direction !== "READ_WRITE") return;
-    if (!def.svg_id) return;
-
-    const el = svg.getElementById(def.svg_id);
+function bindMachineClicks() {
+  Object.keys(MACHINE_MAP).forEach(svgId => {
+    const el = svg.getElementById(svgId);
     if (!el) return;
 
     el.style.cursor = "pointer";
-    el.addEventListener("click", () => toggle(tag));
+    el.addEventListener("click", () => openMachinePopup(svgId));
   });
 }
 
-/* ===================== HOVER GLOW (ELEVATORS) ===================== */
+/* =========================================================
+   POPUP UI
+========================================================= */
 
-function bindHoverGlow() {
-  ["e_1", "e_2", "e_3", "e_4"].forEach((id, i) => {
-    const el = svg.getElementById(id);
-    if (!el) return;
+function openMachinePopup(svgId) {
+  closePopup();
 
-    el.addEventListener("mouseenter", () =>
-      applyGlow(id, true, "#00aaff")
-    );
+  const m = MACHINE_MAP[svgId];
+  const running = PLC[m.runTag];
 
-    el.addEventListener("mousemove", e => {
-      const n = i + 1;
-      showTip(e, `
-<b>Elevator E${n}</b><br>
-Status: ${PLC[`E${n}_RUN`] ? "RUNNING" : "STOPPED"}<br>
-Speed: ${PLC[`E${n}_SPEED`]} RPM<br>
-Run Hrs: ${PLC[`E${n}_HOURS`]?.toFixed(2)}<br>
-Idle Hrs: ${PLC[`E${n}_IDLE`]?.toFixed(2)}
-      `);
-    });
+  const overlay = document.createElement("div");
+  overlay.id = "machine-popup-overlay";
 
-    el.addEventListener("mouseleave", () => {
-      hideTip();
-      updateVisuals();
-    });
-  });
+  overlay.innerHTML = `
+    <div class="machine-popup">
+      <h3>${m.name}</h3>
+      <p>Status:
+        <span class="${running ? "run" : "stop"}">
+          ${running ? "RUNNING" : "STOPPED"}
+        </span>
+      </p>
+
+      <div class="btn-row">
+        <button class="start" onclick="sendCommand('${m.runTag}', true)">START</button>
+        <button class="stop" onclick="sendCommand('${m.runTag}', false)">STOP</button>
+      </div>
+
+      <button class="close" onclick="closePopup()">CLOSE</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
 }
 
-/* ===================== VISUAL UPDATE ===================== */
+/* =========================================================
+   COMMAND HANDLER (SIM MODE)
+========================================================= */
+
+function sendCommand(tag, desiredState) {
+  // For dummy PLC: toggle if needed
+  if (PLC[tag] !== desiredState) {
+    fetch(`/toggle/${tag}`);
+  }
+  closePopup();
+}
+
+/* =========================================================
+   POPUP CLOSE
+========================================================= */
+
+function closePopup() {
+  const p = document.getElementById("machine-popup-overlay");
+  if (p) p.remove();
+}
+
+/* =========================================================
+   VISUAL UPDATE
+========================================================= */
 
 function updateVisuals() {
-
-  /* ---- EQUIPMENT & SWITCH GLOW ---- */
-  Object.entries(TAG_DEFS).forEach(([tag, def]) => {
-    if (!def.svg_id) return;
-    if (typeof PLC[tag] !== "boolean") return;
-
-    applyGlow(def.svg_id, PLC[tag]);
+  Object.entries(MACHINE_MAP).forEach(([svgId, m]) => {
+    applyGlow(svgId, PLC[m.runTag]);
   });
-
-  /* ---- DUST ---- */
-  applyGlow("dust_1", PLC.DUST1_FLOW, "orange");
-  applyGlow("dust_2", PLC.DUST2_FLOW, "orange");
-  applyGlow("dust_3", PLC.DUST3_FLOW, "orange");
-
-  /* ---- PIPE FLOW (EXACT LOGIC KEPT) ---- */
-
-  // E1 → BIN1, BIN2
-  pipeFlow("pipe_1", PLC.E1_RUN, "down");
-  pipeFlow("pipe_12", PLC.E1_RUN, "down");
-  pipeFlow("pipe_13", PLC.E1_RUN, "down");
-
-  // E2 → BIN3
-  pipeFlow("pipe_5", PLC.E2_RUN, "down");
-
-  // BIN3 → CLASSIFIER (dust)
-  pipeFlow("pipe_4", PLC.DUST1_FLOW, "right", true);
-
-  // CLASSIFIER → OUTLET (grain)
-  pipeFlow("pipe_14", PLC.CLASSIFIER_RUN, "right");
-
-  // E3 → BIN4
-  pipeFlow("pipe_7", PLC.E3_RUN, "down");
-
-  // BIN4 → DESTONER
-  pipeFlow("pipe_3", PLC.DESTONER_RUN, "right");
-
-  // DESTONER → DUST2
-  pipeFlow("pipe_8", PLC.DUST2_FLOW, "right", true);
-
-  // E4 → BIN5
-  pipeFlow("pipe_10", PLC.E4_RUN, "down");
-
-  // BIN5 → OUTLET (green like pipe_14)
-  pipeFlow("pipe_9", PLC.DESTONER_RUN, "right");
-
-  // MAIN HEADER
-  pipeFlow(
-    "e2d",
-    PLC.E1_RUN || PLC.E2_RUN || PLC.E3_RUN || PLC.E4_RUN,
-    "right"
-  );
-
-  /* ---- BIN LEVELS ---- */
-  fillBin("bin_1", PLC.BIN1_LEVEL);
-  fillBin("bin_2", PLC.BIN2_LEVEL);
-  fillBin("bin_3", PLC.BIN3_LEVEL);
-  fillBin("bin_4", PLC.BIN4_LEVEL);
-  fillBin("bin_5", PLC.BIN5_LEVEL);
 }
 
-/* ===================== SAFE GLOW ===================== */
+/* =========================================================
+   GLOW EFFECT
+========================================================= */
 
-function applyGlow(groupId, on, color = "#00ff00") {
-  const g = svg.getElementById(groupId);
+function applyGlow(svgId, on) {
+  const g = svg.getElementById(svgId);
   if (!g) return;
 
-  const glow = on ? `drop-shadow(0 0 8px ${color})` : "";
-  g.querySelectorAll("rect, path, circle, polygon, ellipse, image")
+  const glow = on ? "drop-shadow(0 0 8px #00ff00)" : "";
+
+  g.querySelectorAll("path, rect, circle, polygon, ellipse, image")
     .forEach(el => el.style.filter = glow);
 }
 
-/* ===================== PIPE FLOW ===================== */
+/* =========================================================
+   BASIC POPUP STYLES (Injected)
+========================================================= */
 
-function pipeFlow(pipeId, on, direction = "right", dust = false) {
-  const pipeGroup = svg.getElementById(pipeId);
-  if (!pipeGroup) return;
-
-  const shapes = pipeGroup.matches("path, rect")
-    ? [pipeGroup]
-    : pipeGroup.querySelectorAll("path, rect");
-
-  shapes.forEach(shape => {
-    normalizePipe(shape);
-
-    if (!on) {
-      shape.style.animation = "";
-      shape.style.strokeDasharray = "";
-      shape.style.strokeDashoffset = "0";
-      shape.style.stroke = "black";
-      return;
-    }
-
-    shape.style.strokeDasharray = "14 14";
-    shape.style.stroke = dust ? "orange" : "#00ff00";
-
-    const dir = (direction === "left" || direction === "up") ? 1 : -1;
-    const animName = `flow-${pipeId}-${direction}`;
-
-    shape.style.animation = `${animName} ${dust ? 0.6 : 1}s linear infinite`;
-
-    if (!svg.getElementById(animName)) {
-      const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
-      style.id = animName;
-      style.textContent = `
-        @keyframes ${animName} {
-          from { stroke-dashoffset: 0; }
-          to   { stroke-dashoffset: ${28 * dir}; }
-        }
-      `;
-      svg.documentElement.appendChild(style);
-    }
-  });
+const style = document.createElement("style");
+style.textContent = `
+#machine-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
 }
 
-/* ===================== BIN FILL ===================== */
-
-function fillBin(binId, level = 0) {
-  const bin = svg.getElementById(binId);
-  if (!bin) return;
-
-  level = Math.max(0, Math.min(level, 100));
-
-  const rectBody = bin.querySelector("rect");
-  const cone = bin.querySelector("path, polygon");
-  if (!rectBody || !cone) return;
-
-  const rectBox = rectBody.getBBox();
-  const coneBox = cone.getBBox();
-
-  const CONE_PART = 30;
-  const RECT_PART = 70;
-
-  // Cone fill
-  let coneFill = bin.querySelector(".bin-fill-cone");
-  if (!coneFill) {
-    coneFill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    coneFill.setAttribute("class", "bin-fill-cone");
-    coneFill.setAttribute("fill", "#7CFC00");
-    coneFill.setAttribute("opacity", "0.85");
-    bin.appendChild(coneFill);
-  }
-
-  const coneLevel = Math.min(level, CONE_PART) / CONE_PART;
-  const coneHeight = coneBox.height * coneLevel;
-
-  coneFill.setAttribute("x", coneBox.x);
-  coneFill.setAttribute("y", coneBox.y + coneBox.height - coneHeight);
-  coneFill.setAttribute("width", coneBox.width);
-  coneFill.setAttribute("height", coneHeight);
-
-  const clipId = `${binId}-clip`;
-  if (!svg.getElementById(clipId)) {
-    const clip = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
-    clip.setAttribute("id", clipId);
-    clip.appendChild(cone.cloneNode(true));
-    svg.documentElement.appendChild(clip);
-  }
-  coneFill.setAttribute("clip-path", `url(#${clipId})`);
-
-  // Rect fill
-  let rectFill = bin.querySelector(".bin-fill-rect");
-  if (!rectFill) {
-    rectFill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rectFill.setAttribute("class", "bin-fill-rect");
-    rectFill.setAttribute("fill", "#7CFC00");
-    rectFill.setAttribute("opacity", "0.85");
-    bin.appendChild(rectFill);
-  }
-
-  const rectLevel = Math.max(0, (level - CONE_PART) / RECT_PART);
-  const rectHeight = rectBox.height * rectLevel;
-
-  rectFill.setAttribute("x", rectBox.x);
-  rectFill.setAttribute("y", rectBox.y + rectBox.height - rectHeight);
-  rectFill.setAttribute("width", rectBox.width);
-  rectFill.setAttribute("height", rectHeight);
+.machine-popup {
+  background: #111;
+  color: #fff;
+  padding: 20px 24px;
+  border-radius: 10px;
+  min-width: 260px;
+  text-align: center;
+  box-shadow: 0 0 20px #00ff00;
 }
 
-/* ===================== PIPE NORMALIZATION ===================== */
-
-function normalizePipe(shape) {
-  if (shape.dataset.normalized) return;
-
-  const fillColor = shape.getAttribute("fill") || "black";
-  shape.setAttribute("fill", "none");
-  shape.setAttribute("stroke", fillColor);
-  shape.setAttribute("stroke-width", "6");
-  shape.setAttribute("stroke-linecap", "round");
-  shape.setAttribute("stroke-linejoin", "round");
-
-  shape.dataset.normalized = "true";
+.machine-popup h3 {
+  margin: 0 0 10px;
 }
+
+.machine-popup p {
+  margin: 8px 0 16px;
+}
+
+.machine-popup .run {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.machine-popup .stop {
+  color: #ff4444;
+  font-weight: bold;
+}
+
+.btn-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.machine-popup button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.machine-popup button.start {
+  background: #00aa00;
+  color: #fff;
+}
+
+.machine-popup button.stop {
+  background: #cc0000;
+  color: #fff;
+}
+
+.machine-popup button.close {
+  background: #555;
+  color: #fff;
+  width: 100%;
+}
+`;
+document.head.appendChild(style);
