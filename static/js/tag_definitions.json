@@ -1,0 +1,44 @@
+{
+  "E1_RUN": {
+    "category": "EQUIPMENT",
+    "svg_id": "e_1",
+    "description": "Elevator 1 running status",
+    "ui": {
+      "glow": true,
+      "color": "green"
+    },
+    "direction": "READ"
+  },
+
+  "SW3": {
+    "category": "SWITCH",
+    "svg_id": "switch3",
+    "description": "Bin-3 to Classifier gate",
+    "ui": {
+      "clickable": true
+    },
+    "direction": "READ_WRITE"
+  },
+
+  "BIN3_LEVEL": {
+    "category": "ANALOG",
+    "svg_id": "bin_3",
+    "description": "Bin 3 material level (%)",
+    "ui": {
+      "fill": true
+    },
+    "range": [0, 100],
+    "direction": "READ"
+  },
+
+  "DUST1_FLOW": {
+    "category": "DUST",
+    "svg_id": "dust_1",
+    "description": "Classifier dust flow",
+    "ui": {
+      "pipe": "pipe_14",
+      "color": "orange"
+    },
+    "direction": "READ"
+  }
+}

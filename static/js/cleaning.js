@@ -1,11 +1,12 @@
 /* ===================== GLOBALS ===================== */
 
 let PLC = {};
+let TAG_DEFS = {};
 let svg, tooltip;
 
 /* ===================== SVG LOAD ===================== */
 
-document.getElementById("svgObj").addEventListener("load", () => {
+document.getElementById("svgObj").addEventListener("load", async () => {
   svg = document.getElementById("svgObj").contentDocument;
 
   // Responsive safety
@@ -15,11 +16,19 @@ document.getElementById("svgObj").addEventListener("load", () => {
   rootSvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
 
   createTooltip();
+  await loadTagDefs();
   bindClicks();
   bindHoverGlow();
 
   setInterval(pollPLC, 1000);
 });
+
+/* ===================== TAG DEFINITIONS ===================== */
+
+async function loadTagDefs() {
+  const r = await fetch("/tag-defs");
+  TAG_DEFS = await r.json();
+}
 
 /* ===================== TOOLTIP ===================== */
 
@@ -51,7 +60,7 @@ function hideTip() {
   tooltip.style.display = "none";
 }
 
-/* ===================== PLC ===================== */
+/* ===================== PLC POLL ===================== */
 
 async function pollPLC() {
   const r = await fetch("/tags");
@@ -59,40 +68,32 @@ async function pollPLC() {
   updateVisuals();
 }
 
-/* ===================== CLICKS ===================== */
+/* ===================== SAFE TOGGLE ===================== */
 
 function toggle(tag) {
+  if (TAG_DEFS[tag]?.direction !== "READ_WRITE") return;
   fetch(`/toggle/${tag}`);
 }
 
-function bindClicks() {
-  const map = {
-    e_1: "E1_RUN",
-    e_2: "E2_RUN",
-    e_3: "E3_RUN",
-    e_4: "E4_RUN",
-    cc_1: "CC1_RUN",
-    classifier: "CLASSIFIER_RUN",
-    destoner: "DESTONER_RUN",
-    hulling_c: "HULLING_RUN",
-    switch1: "SW1",
-    switch2: "SW2",
-    switch3: "SW3",
-    switch4: "SW4"
-  };
+/* ===================== CLICK BINDING ===================== */
 
-  Object.entries(map).forEach(([id, tag]) => {
-    const el = svg.getElementById(id);
+function bindClicks() {
+  Object.entries(TAG_DEFS).forEach(([tag, def]) => {
+    if (def.direction !== "READ_WRITE") return;
+    if (!def.svg_id) return;
+
+    const el = svg.getElementById(def.svg_id);
     if (!el) return;
+
     el.style.cursor = "pointer";
     el.addEventListener("click", () => toggle(tag));
   });
 }
 
-/* ===================== HOVER GLOW ===================== */
+/* ===================== HOVER GLOW (ELEVATORS) ===================== */
 
 function bindHoverGlow() {
-  ["e_1","e_2","e_3","e_4"].forEach((id,i)=>{
+  ["e_1", "e_2", "e_3", "e_4"].forEach((id, i) => {
     const el = svg.getElementById(id);
     if (!el) return;
 
@@ -106,8 +107,8 @@ function bindHoverGlow() {
 <b>Elevator E${n}</b><br>
 Status: ${PLC[`E${n}_RUN`] ? "RUNNING" : "STOPPED"}<br>
 Speed: ${PLC[`E${n}_SPEED`]} RPM<br>
-Run Hrs: ${PLC[`E${n}_HOURS`].toFixed(2)}<br>
-Idle Hrs: ${PLC[`E${n}_IDLE`].toFixed(2)}
+Run Hrs: ${PLC[`E${n}_HOURS`]?.toFixed(2)}<br>
+Idle Hrs: ${PLC[`E${n}_IDLE`]?.toFixed(2)}
       `);
     });
 
@@ -122,63 +123,58 @@ Idle Hrs: ${PLC[`E${n}_IDLE`].toFixed(2)}
 
 function updateVisuals() {
 
-  /* ---- EQUIPMENT GLOW ---- */
-  applyGlow("e_1", PLC.E1_RUN);
-  applyGlow("e_2", PLC.E2_RUN);
-  applyGlow("e_3", PLC.E3_RUN);
-  applyGlow("e_4", PLC.E4_RUN);
+  /* ---- EQUIPMENT & SWITCH GLOW ---- */
+  Object.entries(TAG_DEFS).forEach(([tag, def]) => {
+    if (!def.svg_id) return;
+    if (typeof PLC[tag] !== "boolean") return;
 
-  applyGlow("cc_1", PLC.CC1_RUN);
-  applyGlow("classifier", PLC.CLASSIFIER_RUN);
-  applyGlow("destoner", PLC.DESTONER_RUN);
-  applyGlow("hulling_c", PLC.HULLING_RUN);
-
-  applyGlow("switch1", PLC.SW1);
-  applyGlow("switch2", PLC.SW2);
-  applyGlow("switch3", PLC.SW3);
-  applyGlow("switch4", PLC.SW4);
+    applyGlow(def.svg_id, PLC[tag]);
+  });
 
   /* ---- DUST ---- */
   applyGlow("dust_1", PLC.DUST1_FLOW, "orange");
   applyGlow("dust_2", PLC.DUST2_FLOW, "orange");
   applyGlow("dust_3", PLC.DUST3_FLOW, "orange");
 
-/* ---- PIPE FLOW (DIRECTIONAL) ---- */
+  /* ---- PIPE FLOW (EXACT LOGIC KEPT) ---- */
 
-/* E1 → bin_1, bin_2 */
-pipeFlow("pipe_1", PLC.E1_RUN, "down");
-pipeFlow("pipe_12", PLC.E1_RUN, "down");
-pipeFlow("pipe_13", PLC.E1_RUN, "down");
+  // E1 → BIN1, BIN2
+  pipeFlow("pipe_1", PLC.E1_RUN, "down");
+  pipeFlow("pipe_12", PLC.E1_RUN, "down");
+  pipeFlow("pipe_13", PLC.E1_RUN, "down");
 
-/* E2 → bin_3 */
-pipeFlow("pipe_5", PLC.E2_RUN, "down");
+  // E2 → BIN3
+  pipeFlow("pipe_5", PLC.E2_RUN, "down");
 
-/* bin_3 → classifier (DUST FLOW → ORANGE) */
-pipeFlow("pipe_4", PLC.DUST1_FLOW, "right", true);
+  // BIN3 → CLASSIFIER (dust)
+  pipeFlow("pipe_4", PLC.DUST1_FLOW, "right", true);
 
-/* classifier → outlet (NORMAL GRAIN FLOW → GREEN) */
-pipeFlow("pipe_14", PLC.CLASSIFIER_RUN, "right");
+  // CLASSIFIER → OUTLET (grain)
+  pipeFlow("pipe_14", PLC.CLASSIFIER_RUN, "right");
 
-/* E3 → bin_4 */
-pipeFlow("pipe_7", PLC.E3_RUN, "down");
+  // E3 → BIN4
+  pipeFlow("pipe_7", PLC.E3_RUN, "down");
 
-/* bin_4 → destoner */
-pipeFlow("pipe_3", PLC.DESTONER_RUN, "right");
+  // BIN4 → DESTONER
+  pipeFlow("pipe_3", PLC.DESTONER_RUN, "right");
 
-/* destoner → dust_2 */
-pipeFlow("pipe_8", PLC.DUST2_FLOW, "right", true);
+  // DESTONER → DUST2
+  pipeFlow("pipe_8", PLC.DUST2_FLOW, "right", true);
 
-/* E4 → bin_5 */
-pipeFlow("pipe_10", PLC.E4_RUN, "down");
+  // E4 → BIN5
+  pipeFlow("pipe_10", PLC.E4_RUN, "down");
 
-/* bin_5 → outlet (NORMAL FLOW like pipe_14) */
-pipeFlow("pipe_9", PLC.DESTONER_RUN, "right");
+  // BIN5 → OUTLET (green like pipe_14)
+  pipeFlow("pipe_9", PLC.DESTONER_RUN, "right");
 
-/* Main header / trunk pipe */
-pipeFlow("e2d", PLC.E1_RUN || PLC.E2_RUN || PLC.E3_RUN || PLC.E4_RUN, "right");
+  // MAIN HEADER
+  pipeFlow(
+    "e2d",
+    PLC.E1_RUN || PLC.E2_RUN || PLC.E3_RUN || PLC.E4_RUN,
+    "right"
+  );
 
-
-  /* ---- BIN LEVEL ---- */
+  /* ---- BIN LEVELS ---- */
   fillBin("bin_1", PLC.BIN1_LEVEL);
   fillBin("bin_2", PLC.BIN2_LEVEL);
   fillBin("bin_3", PLC.BIN3_LEVEL);
@@ -197,13 +193,12 @@ function applyGlow(groupId, on, color = "#00ff00") {
     .forEach(el => el.style.filter = glow);
 }
 
-/* ===================== PIPE FLOW (DIRECTION) ===================== */
+/* ===================== PIPE FLOW ===================== */
 
 function pipeFlow(pipeId, on, direction = "right", dust = false) {
   const pipeGroup = svg.getElementById(pipeId);
   if (!pipeGroup) return;
 
-  // 🔥 target real drawable elements
   const shapes = pipeGroup.matches("path, rect")
     ? [pipeGroup]
     : pipeGroup.querySelectorAll("path, rect");
@@ -228,10 +223,7 @@ function pipeFlow(pipeId, on, direction = "right", dust = false) {
     shape.style.animation = `${animName} ${dust ? 0.6 : 1}s linear infinite`;
 
     if (!svg.getElementById(animName)) {
-      const style = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "style"
-      );
+      const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
       style.id = animName;
       style.textContent = `
         @keyframes ${animName} {
@@ -243,8 +235,6 @@ function pipeFlow(pipeId, on, direction = "right", dust = false) {
     }
   });
 }
-
-
 
 /* ===================== BIN FILL ===================== */
 
@@ -264,7 +254,7 @@ function fillBin(binId, level = 0) {
   const CONE_PART = 30;
   const RECT_PART = 70;
 
-  /* ---- CONE ---- */
+  // Cone fill
   let coneFill = bin.querySelector(".bin-fill-cone");
   if (!coneFill) {
     coneFill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -291,7 +281,7 @@ function fillBin(binId, level = 0) {
   }
   coneFill.setAttribute("clip-path", `url(#${clipId})`);
 
-  /* ---- RECT ---- */
+  // Rect fill
   let rectFill = bin.querySelector(".bin-fill-rect");
   if (!rectFill) {
     rectFill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -309,6 +299,9 @@ function fillBin(binId, level = 0) {
   rectFill.setAttribute("width", rectBox.width);
   rectFill.setAttribute("height", rectHeight);
 }
+
+/* ===================== PIPE NORMALIZATION ===================== */
+
 function normalizePipe(shape) {
   if (shape.dataset.normalized) return;
 
@@ -321,4 +314,3 @@ function normalizePipe(shape) {
 
   shape.dataset.normalized = "true";
 }
-
