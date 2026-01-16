@@ -1,217 +1,167 @@
-/* =========================================================
-   GLOBALS
-========================================================= */
+const API = "/api/tags";
+let statusTimer = null;
+let plcCache = {};
+let svgDoc = null;
 
-let PLC = {};
-let svg;
+/* =========================
+   WAIT FOR SVG LOAD
+========================= */
+const svgObj = document.getElementById("svgObj");
 
-/* =========================================================
-   MACHINE CONFIG (SVG ID → PLC TAG)
-   (Excel & SVG remain unchanged)
-========================================================= */
-
-const MACHINE_MAP = {
-  // Elevators
-  e_1: { name: "Elevator E1", runTag: "E1_RUN" },
-  e_2: { name: "Elevator E2", runTag: "E2_RUN" },
-  e_3: { name: "Elevator E3", runTag: "E3_RUN" },
-  e_4: { name: "Elevator E4", runTag: "E4_RUN" },
-
-  // Cleaning section
-  cc_1: { name: "Classifier", runTag: "CC1_RUN" },
-  destoner: { name: "Destoner", runTag: "DESTONER_RUN" },
-  hulling_c: { name: "Hulling Machine", runTag: "HULLING_RUN" },
-
-  // Add more machines here safely later
-};
-
-/* =========================================================
-   SVG LOAD
-========================================================= */
-
-document.getElementById("svgObj").addEventListener("load", () => {
-  svg = document.getElementById("svgObj").contentDocument;
-
-  bindMachineClicks();
-  setInterval(pollPLC, 1000);
+svgObj.addEventListener("load", () => {
+  svgDoc = svgObj.contentDocument;
+  bindElevators(svgDoc);
+  startPLCPolling();
 });
 
-/* =========================================================
-   PLC POLLING
-========================================================= */
-
-async function pollPLC() {
-  const r = await fetch("/tags");
-  PLC = await r.json();
-  updateVisuals();
-}
-
-/* =========================================================
-   MACHINE CLICK → POPUP
-========================================================= */
-
-function bindMachineClicks() {
-  Object.keys(MACHINE_MAP).forEach(svgId => {
-    const el = svg.getElementById(svgId);
-    if (!el) return;
-
-    el.style.cursor = "pointer";
-    el.addEventListener("click", () => openMachinePopup(svgId));
-  });
-}
-
-/* =========================================================
-   POPUP UI
-========================================================= */
-
-function openMachinePopup(svgId) {
+/* =========================
+   POPUP
+========================= */
+function showPopup(svgElement, title, startTag, stopTag, runTag) {
   closePopup();
 
-  const m = MACHINE_MAP[svgId];
-  const running = PLC[m.runTag];
+  const rect = svgElement.getBoundingClientRect();
 
-  const overlay = document.createElement("div");
-  overlay.id = "machine-popup-overlay";
-
-  overlay.innerHTML = `
-    <div class="machine-popup">
-      <h3>${m.name}</h3>
-      <p>Status:
-        <span class="${running ? "run" : "stop"}">
-          ${running ? "RUNNING" : "STOPPED"}
-        </span>
-      </p>
-
-      <div class="btn-row">
-        <button class="start" onclick="sendCommand('${m.runTag}', true)">START</button>
-        <button class="stop" onclick="sendCommand('${m.runTag}', false)">STOP</button>
-      </div>
-
-      <button class="close" onclick="closePopup()">CLOSE</button>
-    </div>
+  const popup = document.createElement("div");
+  popup.id = "machine-popup";
+  popup.innerHTML = `
+    <h4>${title}</h4>
+    <p>Status: <span id="status-text">---</span></p>
+    <button id="btn-start">START</button>
+    <button id="btn-stop">STOP</button>
+    <button id="btn-close">CLOSE</button>
   `;
 
-  document.body.appendChild(overlay);
+  popup.style.position = "fixed";
+  popup.style.left = rect.right + 10 + "px";
+  popup.style.top = rect.top + "px";
+  popup.style.zIndex = 9999;
+
+  document.body.appendChild(popup);
+
+  document.getElementById("btn-start").onclick = () =>
+    writeTag(startTag, true);
+
+  document.getElementById("btn-stop").onclick = () =>
+    writeTag(stopTag, true);
+
+  document.getElementById("btn-close").onclick = closePopup;
+
+  statusTimer = setInterval(() => updateStatus(runTag), 1000);
 }
-
-/* =========================================================
-   COMMAND HANDLER (SIM MODE)
-========================================================= */
-
-function sendCommand(tag, desiredState) {
-  // For dummy PLC: toggle if needed
-  if (PLC[tag] !== desiredState) {
-    fetch(`/toggle/${tag}`);
-  }
-  closePopup();
-}
-
-/* =========================================================
-   POPUP CLOSE
-========================================================= */
 
 function closePopup() {
-  const p = document.getElementById("machine-popup-overlay");
+  if (statusTimer) {
+    clearInterval(statusTimer);
+    statusTimer = null;
+  }
+  const p = document.getElementById("machine-popup");
   if (p) p.remove();
 }
 
-/* =========================================================
-   VISUAL UPDATE
-========================================================= */
+/* =========================
+   TAG IO
+========================= */
+function writeTag(tag, value) {
+  console.log("WRITE:", tag, value);
 
-function updateVisuals() {
-  Object.entries(MACHINE_MAP).forEach(([svgId, m]) => {
-    applyGlow(svgId, PLC[m.runTag]);
-  });
+  fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag, value })
+  })
+    .then(r => r.json())
+    .then(res => console.log("PLC:", res))
+    .catch(err => console.error("API ERROR:", err));
 }
 
-/* =========================================================
-   GLOW EFFECT
-========================================================= */
+function updateStatus(runTag) {
+  const el = document.getElementById("status-text");
+  if (!el) return;
 
-function applyGlow(svgId, on) {
-  const g = svg.getElementById(svgId);
-  if (!g) return;
-
-  const glow = on ? "drop-shadow(0 0 8px #00ff00)" : "";
-
-  g.querySelectorAll("path, rect, circle, polygon, ellipse, image")
-    .forEach(el => el.style.filter = glow);
+  el.innerText = plcCache[runTag] ? "RUNNING" : "STOPPED";
+  el.style.color = plcCache[runTag] ? "green" : "red";
 }
 
-/* =========================================================
-   BASIC POPUP STYLES (Injected)
-========================================================= */
-
-const style = document.createElement("style");
-style.textContent = `
-#machine-popup-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
+/* =========================
+   SVG BINDINGS
+========================= */
+function bindElevators(svgDoc) {
+  bind(svgDoc, "e_1", "Elevator E1", "E1_CMD_START", "E1_CMD_STOP", "E1_RUN");
+  bind(svgDoc, "e_2", "Elevator E2", "E2_CMD_START", "E2_CMD_STOP", "E2_RUN");
+  bind(svgDoc, "e_3", "Elevator E3", "E3_CMD_START", "E3_CMD_STOP", "E3_RUN");
+  bind(svgDoc, "e_4", "Elevator E4", "E4_CMD_START", "E4_CMD_STOP", "E4_RUN");
 }
 
-.machine-popup {
-  background: #111;
-  color: #fff;
-  padding: 20px 24px;
-  border-radius: 10px;
-  min-width: 260px;
-  text-align: center;
-  box-shadow: 0 0 20px #00ff00;
+function bind(svgDoc, id, title, startTag, stopTag, runTag) {
+  const el = svgDoc.getElementById(id);
+  if (!el) {
+    console.warn("SVG element not found:", id);
+    return;
+  }
+
+  el.style.cursor = "pointer";
+  el.addEventListener("click", () =>
+    showPopup(el, title, startTag, stopTag, runTag)
+  );
 }
 
-.machine-popup h3 {
-  margin: 0 0 10px;
+/* =========================
+   PLC POLLING (ONE LOOP)
+========================= */
+function startPLCPolling() {
+  setInterval(() => {
+    fetch(API)
+      .then(r => r.json())
+      .then(tags => {
+        plcCache = tags;
+        updateElevatorAnimations();
+        updateBinLevels();
+      });
+  }, 1000);
 }
 
-.machine-popup p {
-  margin: 8px 0 16px;
+/* =========================
+   ELEVATOR ANIMATION
+========================= */
+function updateElevatorAnimations() {
+  animateElevator("e_1", "E1_RUN");
+  animateElevator("e_2", "E2_RUN");
+  animateElevator("e_3", "E3_RUN");
+  animateElevator("e_4", "E4_RUN");
 }
 
-.machine-popup .run {
-  color: #00ff00;
-  font-weight: bold;
+function animateElevator(elevatorId, runTag) {
+  if (!svgDoc) return;
+
+  const el = svgDoc.getElementById(elevatorId);
+  if (!el) return;
+
+  if (plcCache[runTag]) {
+    el.classList.add("elevator-running");
+  } else {
+    el.classList.remove("elevator-running");
+  }
 }
 
-.machine-popup .stop {
-  color: #ff4444;
-  font-weight: bold;
+/* =========================
+   BIN LEVEL BARS
+========================= */
+function updateBinLevels() {
+  updateBin("bin1-fill", plcCache.BIN1_LEVEL);
+  updateBin("bin2-fill", plcCache.BIN2_LEVEL);
+  updateBin("bin3-fill", plcCache.BIN3_LEVEL);
+  updateBin("bin4-fill", plcCache.BIN4_LEVEL);
+  updateBin("bin5-fill", plcCache.BIN5_LEVEL);
 }
 
-.btn-row {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-bottom: 12px;
-}
+function updateBin(id, level) {
+  const el = document.getElementById(id);
+  if (!el || level === undefined) return;
 
-.machine-popup button {
-  padding: 6px 14px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-}
+  el.style.height = level + "%";
 
-.machine-popup button.start {
-  background: #00aa00;
-  color: #fff;
+  if (level < 60) el.style.background = "green";
+  else if (level < 85) el.style.background = "orange";
+  else el.style.background = "red";
 }
-
-.machine-popup button.stop {
-  background: #cc0000;
-  color: #fff;
-}
-
-.machine-popup button.close {
-  background: #555;
-  color: #fff;
-  width: 100%;
-}
-`;
-document.head.appendChild(style);

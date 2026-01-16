@@ -92,3 +92,44 @@ g[id^="pipe_"] rect,
   from { stroke-dashoffset: 0; }
   to   { stroke-dashoffset: -28; }
 }
+#machine-popup {
+  background: #111;
+  color: #0f0;
+  padding: 10px;
+  border-radius: 6px;
+  font-family: monospace;
+  box-shadow: 0 0 15px #0f0;
+}
+
+#machine-popup button {
+  margin: 5px;
+  cursor: pointer;
+}
+/* Elevator running animation */
+.elevator-running {
+  animation: elevatorMove 1s linear infinite;
+}
+
+@keyframes elevatorMove {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-20px);
+  }
+}
+.bin-level {
+  position: absolute;
+  width: 12px;
+  height: 80px;
+  border: 1px solid #333;
+  background: #eee;
+}
+
+.bin-fill {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 0%;
+  background: green;
+}
